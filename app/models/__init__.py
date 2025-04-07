@@ -1,4 +1,4 @@
-# Initialization file for the models package
+# Initialization file for the models module
 
 from .user import User
 from .task_manager import TaskManager
