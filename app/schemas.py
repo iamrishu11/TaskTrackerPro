@@ -1,4 +1,4 @@
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator , ConfigDict
 from typing import Optional
 from datetime import date
 
@@ -10,7 +10,7 @@ class TaskCreateSchema(BaseModel):
     created_at: date
     assigned_user: str
 
-    @validator('priority')
+    @field_validator('priority')
     def validate_priority(cls, value):
         if value.lower() not in ['low', 'medium', 'high']:
             raise ValueError("Priority must be 'low', 'medium', or 'high'")
@@ -18,15 +18,18 @@ class TaskCreateSchema(BaseModel):
 
 
 class TaskUpdateSchema(BaseModel):
-    task_name: Optional[str]
-    description: Optional[str]
-    status: Optional[bool]
-    priority: Optional[str]
-    created_at: Optional[date]
-    assigned_user: Optional[str]
+    task_name: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[bool] = None
+    priority: Optional[str] = None
+    created_at: Optional[date] = None
+    assigned_user: Optional[str] = None
 
-    @validator("priority")
+    model_config = ConfigDict(extra="allow")
+
+    @field_validator("priority")
     def validate_priority(cls, v):
         if v and v.lower() not in ["low", "medium", "high"]:
             raise ValueError("Priority must be 'low', 'medium', or 'high'")
         return v.lower() if v else v
+

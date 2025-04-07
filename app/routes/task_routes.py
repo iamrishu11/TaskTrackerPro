@@ -26,6 +26,31 @@ def ping():
 @bp.route("/task", methods=["POST"])
 @jwt_required(roles=["admin"])
 def create_task():
+    """
+    Create a new task in the TaskManager.
+
+    **Expected Input (JSON):**
+    {
+        "task_name": "string",          # Required: Name of the task
+        "description": "string",         # Optional: Description of the task
+        "status": true/false,            # Optional: Task status (default is false)
+        "priority": "string",           # Required: Priority level (e.g., High, Medium, Low)
+        "created_at": "YYYY-MM-DD",      # Required: Date the task was created
+        "assigned_user": "string"        # Required: Username of the assigned user
+    }
+
+    **Authorization:**
+    - Requires JWT token with "admin" role.
+
+    **Rate Limiting:**
+    - Limited to 10 requests per minute per user.
+
+    **Responses:**
+    - 201: Task successfully created
+    - 400: Validation error or bad input
+    - 401: Unauthorized (missing/invalid token)
+    - 403: Forbidden (role not authorized)
+    """
     try:
         validated_data = TaskCreateSchema(**request.get_json())
     except ValidationError as e:
@@ -96,11 +121,13 @@ def get_logged_task(log_id):
 @jwt_required(roles=["admin"])
 def update_task(task_id):
     try:
-        validated_data = TaskUpdateSchema(**request.get_json())
+        data = request.get_json()
+        validated_data = TaskUpdateSchema.model_validate(data)
+        update_data = validated_data.model_dump(exclude_unset=True)
     except ValidationError as e:
         return jsonify({"error": e.errors()}), 400
 
-    task = task_manager_service.update_task(task_id, validated_data.dict(exclude_unset=True))
+    task = task_manager_service.update_task(task_id, update_data)
     if not task:
         return {"message": "Task not found"}, 404
     return jsonify({"message": "Task updated"})

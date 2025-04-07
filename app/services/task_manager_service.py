@@ -1,5 +1,5 @@
 from app.extensions import db
-from app.models import TaskManager
+from app.models import TaskManager, TaskLogger
 from datetime import datetime
 
 def create_task(data):
@@ -25,8 +25,21 @@ def update_task(task_id, data):
     task = TaskManager.query.get(task_id)
     if not task:
         return None
+
+    old_status = task.status  # Store previous status before update
+
     for key, value in data.items():
         setattr(task, key, value)
+
+    # If status changed, log to TaskLogger
+    if "status" in data and data["status"] != old_status:
+        log = TaskLogger(
+            task_id=task.id,
+            status=data["status"],
+            date_logged=datetime.utcnow()
+        )
+        db.session.add(log)
+
     db.session.commit()
     return task
 
