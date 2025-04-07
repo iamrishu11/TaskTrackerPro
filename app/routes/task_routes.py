@@ -71,11 +71,10 @@ def create_task():
     """
     try:
         validated_data = TaskCreateSchema(**request.get_json())
+        task = task_manager_service.create_task(validated_data.dict())
+        return jsonify({"id": task.id, "task_name": task.task_name}), 201
     except ValidationError as e:
         return jsonify({"error": e.errors()}), 400
-
-    task = task_manager_service.create_task(validated_data.dict())
-    return jsonify({"id": task.id, "task_name": task.task_name}), 201
 
 @bp.route("/tasks", methods=["GET"])
 @limiter.limit("60 per minute")
