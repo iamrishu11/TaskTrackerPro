@@ -17,10 +17,28 @@ bp = Blueprint("tasks", __name__, url_prefix="/")
 
 @bp.route("/")
 def index():
+    """
+    Welcome endpoint for the TaskTrackerPro API.
+    
+    **Response:**
+    - 200: Returns welcome message
+      ```json
+      {"message": "Welcome to TaskTrackerPro!"}
+      ```
+    """
     return {"message": "Welcome to TaskTrackerPro!"}
 
 @bp.route("/ping", methods=["GET"])
 def ping():
+    """
+    Health check endpoint.
+    
+    **Response:**
+    - 200: Returns service status
+      ```json
+      {"message": "pong!"}
+      ```
+    """
     return {"message": "pong!"}, 200
 
 @bp.route("/task", methods=["POST"])
@@ -62,6 +80,38 @@ def create_task():
 @bp.route("/tasks", methods=["GET"])
 @limiter.limit("60 per minute")
 def get_tasks():
+    """
+    Retrieve paginated tasks with optional date filtering.
+
+    **Query Parameters:**
+    - page: Page number (default: 1)
+    - per_page: Items per page (default: 10)
+    - date: Filter by date (format: YYYY-MM-DD)
+
+    **Response:**
+    - 200: Returns paginated task list
+      ```json
+      {
+        "tasks": [{
+          "id": 1,
+          "task_id": 1,
+          "date_logged": "2025-04-01",
+          "status": true,
+          "task": {
+            "task_name": "Sample",
+            "description": "Details"
+          }
+        }],
+        "total": 100,
+        "page": 1,
+        "pages": 10
+      }
+      ```
+    - 400: Invalid date format
+      ```json
+      {"error": "Invalid date format. Use YYYY-MM-DD."}
+      ```
+    """
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 10, type=int)
     date_str = request.args.get("date")
@@ -95,6 +145,34 @@ def get_tasks():
 @bp.route("/tasklogger/<int:log_id>", methods=["GET"])
 @limiter.limit("20/minute")
 def get_logged_task(log_id):
+    """
+    Get detailed information about a specific task log entry.
+
+    **Parameters:**
+    - log_id: TaskLogger ID (required)
+
+    **Response:**
+    - 200: Returns task log details
+      ```json
+      {
+        "log_id": 1,
+        "date_logged": "2025-04-01",
+        "status": true,
+        "task": {
+          "id": 1,
+          "task_name": "Sample",
+          "description": "Details",
+          "priority": "high",
+          "created_at": "2025-04-01",
+          "assigned_user": "admin"
+        }
+      }
+      ```
+    - 404: Task log not found
+      ```json
+      {"message": "Task log not found"}
+      ```
+    """
     log = TaskLogger.query.options(
         joinedload(TaskLogger.task).joinedload(TaskManager.user)
     ).filter_by(id=log_id).first()
@@ -120,6 +198,39 @@ def get_logged_task(log_id):
 @bp.route("/task/<int:task_id>", methods=["PUT"])
 @jwt_required(roles=["admin"])
 def update_task(task_id):
+    """
+    Update an existing task.
+
+    **Authorization:**
+    - Requires JWT token with "admin" role
+
+    **Parameters:**
+    - task_id: Task ID to update (required)
+
+    **Request Body (JSON):**
+    ```json
+    {
+        "task_name": "string (optional)",
+        "description": "string (optional)",
+        "status": "boolean (optional)",
+        "priority": "string (optional, enum: low/medium/high)",
+        "assigned_user": "string (optional)"
+    }
+    ```
+
+    **Responses:**
+    - 200: Task updated successfully
+      ```json
+      {"message": "Task updated"}
+      ```
+    - 400: Validation error
+    - 401: Unauthorized
+    - 403: Forbidden
+    - 404: Task not found
+      ```json
+      {"message": "Task not found"}
+      ```
+    """
     try:
         data = request.get_json()
         validated_data = TaskUpdateSchema.model_validate(data)
@@ -135,6 +246,22 @@ def update_task(task_id):
 
 @bp.route("/task/<int:task_id>", methods=["DELETE"])
 def delete_task(task_id):
+    """
+    Soft delete a task (sets status to False).
+
+    **Parameters:**
+    - task_id: Task ID to delete (required)
+
+    **Response:**
+    - 200: Task soft-deleted
+      ```json
+      {"message": "Task soft-deleted"}
+      ```
+    - 404: Task not found
+      ```json
+      {"message": "Task not found"}
+      ```
+    """
     task = task_manager_service.delete_task(task_id)
     if not task:
         return {"message": "Task not found"}, 404
@@ -146,12 +273,43 @@ def delete_task(task_id):
 
 @bp.route("/activetasks", methods=["GET"])
 def get_all_tasks():
+    """
+    Get all active tasks (status=True).
+
+    **Response:**
+    - 200: Returns list of active tasks
+      ```json
+      [{"id": 1, "task_name": "Task 1"}, ...]
+      ```
+    """
     tasks = task_manager_service.get_all_tasks()
     return jsonify([{"id": t.id, "task_name": t.task_name} for t in tasks])
 
 @bp.route("/upload-csv", methods=["POST"])
 @limiter.limit("10/hour")
 def upload_csv():
+    """
+    Bulk upload tasks from CSV file.
+
+    **Request:**
+    - Form-data with CSV file attachment
+
+    **CSV Format:**
+    ```
+    task_name,description,status,priority,created_at,assigned_user
+    Task 1,Description 1,true,high,04/01/2025,user1
+    ```
+
+    **Responses:**
+    - 200: CSV processed successfully
+      ```json
+      {"message": "X tasks uploaded successfully"}
+      ```
+    - 400: Invalid request
+      ```json
+      {"error": "CSV file is required"}
+      ```
+    """
     if 'file' not in request.files:
         return jsonify({"error": "CSV file is required"}), 400
 
@@ -175,7 +333,7 @@ def upload_csv():
                 user = User(
                     username=username,
                     email=f"{username}@example.com",
-                    password="default123",  # You can later hash/change this
+                    password="default123",  # Can change it later
                     role="user"
                 )
                 db.session.add(user)
@@ -203,6 +361,15 @@ def upload_csv():
 
 @bp.route("/log-tasks", methods=["POST"])
 def trigger_task_logging():
+    """
+    Manually trigger the daily task logging process.
+
+    **Response:**
+    - 202: Logging process initiated
+      ```json
+      {"message": "Logging of active tasks has been triggered."}
+      ```
+    """
     log_active_tasks_to_logger.delay()  # Asynchronous task execution
     return jsonify({"message": "Logging of active tasks has been triggered."}), 202
 
