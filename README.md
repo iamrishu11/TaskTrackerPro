@@ -131,9 +131,14 @@ Use [Postman](https://postman.com) to test routes. Include the JWT token in head
 -Avoiding duplicate task logs
 -Docker-ready configuration
 
+## 🔌 API
+
+For detailed api explanation plese refer to [API Guide](APIDOCS.md)
+
+
 ## 👨‍💻 Author
 Made with 💻 by Rishank Jain.
 
-## LICENSE 🧾
+## 🧾 LICENSE 
 
 This project is licensed under the [MIT License](LICENSE).
