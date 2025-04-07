@@ -122,6 +122,122 @@ Use the login endpoint to obtain a token.
 
 Use [Postman](https://postman.com) to test routes. Include the JWT token in headers where required.
 
+## 🏗 Architecture
+
+```bash
+┌─────────────────────────────────────────────────┐
+│                   Client (Postman)              │
+└───────────────────────┬─────────────────────────┘
+                        │ HTTP/HTTPS
+┌───────────────────────▼────────────────────────┐
+│               Flask Application Layer          │
+│  ┌─────────────┐    ┌─────────────┐            │
+│  │   Routes    │    │  Blueprints │            │
+│  └─────────────┘    └─────────────┘            │
+│           │  ▲               │  ▲              │
+│ JSON      │  │ JSON          │  │              │
+│ Requests  │  │ Responses     │  │              │
+│           ▼  │               ▼  │              │
+│  ┌─────────────────────────────────────────┐   │
+│  │              Services Layer             │   │
+│  │ - Business logic (e.g., task creation)  │   │
+│  └─────────────────────────────────────────┘   │
+│           │  ▲               │  ▲              │
+│  DTOs     │  │   Domain      │  │              │
+│           ▼  │   Models      │  │              │
+│  ┌─────────────────────────────────────────┐   │
+│  │            Repository Layer             │   │
+│  │ - Pure database operations              │   │
+│  │ - SQLAlchemy queries                    │   │
+│  └─────────────────────────────────────────┘   │
+│           │  ▲                                 │
+│           │  │                                 │
+│           ▼  │                                 │
+│  ┌─────────────────────────────────────────┐   │
+│  │               PostgreSQL                │   │
+│  └─────────────────────────────────────────┘   │
+│           ▲                                    │
+│           │                                    │
+│           ▼                                    │
+│  ┌─────────────────────────────────────────┐   │
+│  │               Redis (Cache)             │   │
+│  └─────────────────────────────────────────┘   │
+│                                                │
+│  ┌─────────────────────────────────────────┐   │
+│  │               Celery                    │   │
+│  │ - Async tasks (e.g., daily logging)     │   │
+│  └─────────────────────────────────────────┘   │
+└────────────────────────────────────────────────┘
+
+```
+1. **Client Layer**
+
+* What it is:
+    - Postman (for testing) or any frontend application
+
+* Key Actions:
+    - Sends HTTP requests (e.g., POST /task)
+    - Receives JSON responses
+
+2. **Flask Application Layer**
+
+* Routes/Blueprints
+    - Role:
+        - Entry point for API requests
+        - Handles authentication (@jwt_required)
+        - Rate limiting (@limiter.limit)
+
+* Services Layer
+    - Role:
+        - Contains business logic (e.g., "Only admins can delete tasks")
+        - Coordinates between repositories and routes
+
+3. **Data Access Layer**
+
+* Repositories
+    - Role:
+        - Pure database operations (CRUD)
+        - No business logic
+
+* Models
+    - Role:
+        - Define database schema (PostgreSQL tables)
+        - Relationships (e.g., TaskManager ↔ TaskLogger)
+
+4. **Infrastructure Layer** 
+
+* PostgreSQL
+    - Role:
+        - Primary database for all persistent data
+        - Managed via SQLAlchemy ORM
+
+* Redis
+    - Role:
+        - Caching (e.g., paginated task lists)
+        - Rate limiting storage
+        - Celery message broker
+
+* Celery
+    - Role:
+        - Handles async tasks (e.g., daily task logging)
+        - Uses Redis as a message queue
+
+5. **Critical Data Flows**
+
+* Task Creation
+
+``` json
+sequenceDiagram
+    Client->>Routes: POST /task (JSON)
+    Routes->>Services: Validate input
+    Services->>Repositories: Save to DB
+    Repositories->>PostgreSQL: INSERT task
+    PostgreSQL->>Repositories: New task ID
+    Repositories->>Services: Task object
+    Services->>Routes: Return ID
+    Routes->>Client: 201 Created
+```
+
 ## 🧼 Best Practices Followed
 
 -Modular code architecture
