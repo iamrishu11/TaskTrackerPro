@@ -238,4 +238,6 @@ All endpoints use Pydantic schemas with these rules:
 - Status: boolean
 - Required fields marked in schemas
 
+## Redis Working proof 
 
+<img src="assets\Redis working.png" description="Imgae of redis serever rendereing in 3600 seconds">
