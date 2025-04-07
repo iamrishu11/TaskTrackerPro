@@ -226,7 +226,7 @@ Use [Postman](https://postman.com) to test routes. Include the JWT token in head
 
 * Task Creation
 
-``` json
+```text
 sequenceDiagram
     Client->>Routes: POST /task (JSON)
     Routes->>Services: Validate input
