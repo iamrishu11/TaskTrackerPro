@@ -73,7 +73,8 @@ python main.py
 - Celery Worker
 
 ```bash
-celery -A app.celery worker --loglevel=info
+$env:PYTHONPATH = "."
+celery -A celery_worker.celery_app worker --loglevel=info
 ```
 
 - Run your redis server

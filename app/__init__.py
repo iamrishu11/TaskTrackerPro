@@ -1,4 +1,4 @@
-from flask import Flask  # type: ignore
+from flask import Flask
 from .extensions import db, migrate, limiter, redis_client
 from .routes import task_routes, user_routes
 from sqlalchemy.exc import OperationalError

@@ -87,14 +87,14 @@ Requires admin role
 ```
 
 ### Get Tasks (Paginated)
-GET /tasks
+GET /tasks?date=2025-04-07
 
 **Query Parameters:**
 - page (default: 1)
 - per_page (default: 10)
 - date (optional filter by date)
 
-**Request:**
+**Response:**
 ```json
 {
   "tasks": [
@@ -173,6 +173,7 @@ Rate limited to 10/hour
 
 **Request:**
 
+- Add Header 'Content-Type: multipart/form-data'
 - Form-data with CSV file (see sample below)
 
 ```bash

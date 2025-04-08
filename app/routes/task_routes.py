@@ -77,68 +77,55 @@ def create_task():
         return jsonify({"error": e.errors()}), 400
 
 @bp.route("/tasks", methods=["GET"])
-@limiter.limit("60 per minute")
+@limiter.limit("60/minute")
 def get_tasks():
     """
-    Retrieve paginated tasks with optional date filtering.
+    Get tasks from TaskLogger with optional pagination and date filtering.
 
-    **Query Parameters:**
-    - page: Page number (default: 1)
-    - per_page: Items per page (default: 10)
-    - date: Filter by date (format: YYYY-MM-DD)
+    Query Parameters:
+    - date (optional): Filter by specific date (YYYY-MM-DD)
+    - page (optional): Page number for pagination
+    - per_page (optional): Number of items per page
 
-    **Response:**
-    - 200: Returns paginated task list
-      ```json
-      {
-        "tasks": [{
-          "id": 1,
-          "task_id": 1,
-          "date_logged": "2025-04-01",
-          "status": true,
-          "task": {
-            "task_name": "Sample",
-            "description": "Details"
-          }
-        }],
-        "total": 100,
-        "page": 1,
-        "pages": 10
-      }
-      ```
-    - 400: Invalid date format
-      ```json
-      {"error": "Invalid date format. Use YYYY-MM-DD."}
-      ```
+    Returns:
+        Paginated list of tasks (optionally filtered by date), or all tasks for the specified date.
     """
-    page = request.args.get("page", 1, type=int)
-    per_page = request.args.get("per_page", 10, type=int)
-    date_str = request.args.get("date")
+    page = int(request.args.get("page", 1))
+    per_page = int(request.args.get("per_page", 10))
+    date = request.args.get("date")
 
-    cache_key = f"tasks:{date_str}:{page}:{per_page}" if date_str else f"tasks:all:{page}:{per_page}"
+    cache_key = f"tasklogs:{date}:{page}:{per_page}"
     cached_data = redis_client.get(cache_key)
+
     if cached_data:
         return jsonify(json.loads(cached_data)), 200
 
-    query = TaskLogger.query.options(joinedload(TaskLogger.task))
-    
-    if date_str:
-        try:
-            date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
-            query = query.filter(db.func.date(TaskLogger.date_logged) == date_obj)
-        except ValueError:
-            return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
+    query = db.session.query(TaskLogger).options(joinedload(TaskLogger.task))
 
-    paginated = query.order_by(TaskLogger.date_logged.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    if date:
+        try:
+            query_date = datetime.strptime(date, "%Y-%m-%d").date()
+            query = query.filter(TaskLogger.date_logged == query_date)
+        except ValueError:
+            return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+
+    paginated_logs = query.order_by(TaskLogger.date_logged.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+
+    serialized = [serialize_task(log) for log in paginated_logs.items]
+
     result = {
-        "tasks": [serialize_task(task) for task in paginated.items],
-        "total": paginated.total,
-        "page": paginated.page,
-        "pages": paginated.pages
+        "tasks": serialized,
+        "total": paginated_logs.total,
+        "pages": paginated_logs.pages,
+        "current_page": paginated_logs.page,
     }
 
-    redis_client.setex(cache_key, 60, json.dumps(result))
+    redis_client.setex(cache_key, 60, json.dumps(result))  # Cache for 1 minute
+
     return jsonify(result), 200
+
 
 
 @bp.route("/tasklogger/<int:log_id>", methods=["GET"])
@@ -288,10 +275,11 @@ def get_all_tasks():
 @limiter.limit("10/hour")
 def upload_csv():
     """
-    Bulk upload tasks from CSV file.
+    Bulk upload tasks from a CSV file with duplicate detection.
 
     **Request:**
-    - Form-data with CSV file attachment
+    - Content-Type: multipart/form-data
+    - Form-data field named 'file' containing a .csv file
 
     **CSV Format:**
     ```
@@ -299,14 +287,30 @@ def upload_csv():
     Task 1,Description 1,true,high,04/01/2025,user1
     ```
 
+    **Behavior:**
+    - Creates a new User if the `assigned_user` does not exist.
+    - Checks for duplicate tasks based on:
+      - task_name
+      - description
+      - created_at
+      - user_id
+    - Skips duplicate entries and only inserts unique ones.
+
     **Responses:**
     - 200: CSV processed successfully
       ```json
-      {"message": "X tasks uploaded successfully"}
+      {
+        "message": "X tasks uploaded successfully",
+        "skipped": Y
+      }
       ```
-    - 400: Invalid request
+    - 400: Missing or invalid file
       ```json
       {"error": "CSV file is required"}
+      ```
+      or
+      ```json
+      {"error": "Invalid file format. Upload a CSV file."}
       ```
     """
     if 'file' not in request.files:
@@ -321,6 +325,7 @@ def upload_csv():
     reader = csv.DictReader(stream)
 
     success_count = 0
+    skipped_count = 0
 
     for row in reader:
         try:
@@ -332,18 +337,34 @@ def upload_csv():
                 user = User(
                     username=username,
                     email=f"{username}@example.com",
-                    password="default123",  # Can change it later
+                    password="default123",
                     role="user"
                 )
                 db.session.add(user)
-                db.session.flush()  # Get user.id without full commit
+                db.session.flush()
+
+            task_name = row["task_name"].strip()
+            description = row.get("description", "").strip()
+            created_at = datetime.strptime(row["created_at"].strip(), "%m/%d/%Y").date()
+
+            # Check if task already exists for the same user on the same date
+            existing_task = TaskManager.query.filter_by(
+                task_name=task_name,
+                description=description,
+                created_at=created_at,
+                user_id=user.id
+            ).first()
+
+            if existing_task:
+                skipped_count += 1
+                continue  # Skip duplicate
 
             task = TaskManager(
-                task_name=row["task_name"].strip(),
-                description=row.get("description", "").strip(),
+                task_name=task_name,
+                description=description,
                 status=row["status"].strip().lower() in ["true", "1", "yes"],
                 priority=row["priority"].strip(),
-                created_at=datetime.strptime(row["created_at"].strip(), "%m/%d/%Y").date(),
+                created_at=created_at,
                 user_id=user.id
             )
 
@@ -356,7 +377,11 @@ def upload_csv():
 
     db.session.commit()
 
-    return jsonify({"message": f"{success_count} tasks uploaded successfully"})
+    return jsonify({
+        "message": f"{success_count} tasks uploaded successfully",
+        "skipped": skipped_count
+    })
+
 
 @bp.route("/log-tasks", methods=["POST"])
 def trigger_task_logging():
@@ -371,35 +396,3 @@ def trigger_task_logging():
     """
     log_active_tasks_to_logger.delay()  # Asynchronous task execution
     return jsonify({"message": "Logging of active tasks has been triggered."}), 202
-
-@bp.route("/tasks", methods=["GET"])
-def get_logged_tasks_paginated():
-    page = request.args.get("page", 1, type=int)
-    per_page = request.args.get("per_page", 10, type=int)
-
-    paginated_logs = TaskLogger.query.paginate(page=page, per_page=per_page, error_out=False)
-    
-    data = []
-    for log in paginated_logs.items:
-        task = log.task  # from relationship
-        data.append({
-            "log_id": log.id,
-            "date_logged": log.date_logged.strftime("%Y-%m-%d"),
-            "status": log.status,
-            "task": {
-                "id": task.id,
-                "task_name": task.task_name,
-                "description": task.description,
-                "priority": task.priority,
-                "created_at": task.created_at.strftime("%Y-%m-%d") if task.created_at else None,
-                "assigned_user": task.user.username if task.user else None
-            }
-        })
-
-    return jsonify({
-        "page": page,
-        "per_page": per_page,
-        "total": paginated_logs.total,
-        "pages": paginated_logs.pages,
-        "logs": data
-    }), 200
