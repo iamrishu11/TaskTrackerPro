@@ -74,7 +74,14 @@ python main.py
 
 ```bash
 $env:PYTHONPATH = "."
-celery -A celery_worker.celery_app worker --loglevel=info
+celery -A celery_worker.celery_app worker --loglevel=info --pool=solo
+```
+
+- Celery Beat
+
+```bash
+$env:PYTHONPATH = "."
+celery -A celery_worker.celery_app beat --loglevel=info
 ```
 
 - Run your redis server
