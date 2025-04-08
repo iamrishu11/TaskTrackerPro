@@ -241,7 +241,7 @@ def delete_task(task_id):
     **Response:**
     - 200: Task soft-deleted
       ```json
-      {"message": "Task soft-deleted"}
+      {"message": "Task soft-deleted", "task_id": 1, "status": false}
       ```
     - 404: Task not found
       ```json
@@ -255,7 +255,11 @@ def delete_task(task_id):
     # Soft delete by marking status as False
     task.status = False
     db.session.commit()
-    return jsonify({"message": "Task soft-deleted"})
+    return jsonify({
+        "message": "Task soft-deleted successfully",
+        "task_id": task.id,
+        "status": task.status
+    })
 
 @bp.route("/activetasks", methods=["GET"])
 def get_all_tasks():

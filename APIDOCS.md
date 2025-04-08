@@ -118,7 +118,7 @@ GET /tasks?date=2025-04-07
 ### Get Task Log Details
 GET /tasklogger/<<int:log_id>>
 
-**Request:**
+**Response:**
 ```json
 {
   "log_id": 1,
@@ -154,14 +154,15 @@ Requires admin role
 }
 ```
 
-### Update Task
+### Delete Task
 DELETE /task/<<int:task_id>>
 
 **Response:**
 ```json
 {
-  "task_name": "Updated Name",
-  "priority": "medium"
+  "message": "Task soft-deleted successfully",
+  "task_id": "task.id",
+  "status": "task.status"
 }
 ```
 
