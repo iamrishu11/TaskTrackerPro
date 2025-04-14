@@ -13,7 +13,7 @@ A high-performance, secure, and scalable task tracking backend system built with
 - Redis for caching and message brokering
 - JWT Authentication
 - CSV upload to seed tasks
-- Pydantic-style validation with Marshmallow
+- Pydantic-style validation
 - Soft-deletion, pagination, and filtered query support
 - Rate limiting and secure API handling
 
